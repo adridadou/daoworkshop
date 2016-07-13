@@ -1153,48 +1153,72 @@ contract SampleOfferWithoutReward {
     uint public oneTimeCosts;
     uint public dailyWithdrawLimit;
 
-    address public contractor;
-    bytes32 public IPFSHashOfTheProposalDocument;
-    uint public paidOut;
+    struct Actor{
+            address addr;
+            uint paidOut;
+            uint rate;
+    }
+
+    Actor public projectMgr;
+    Actor public developer;
+    Actor public designer;
 
     uint public dateOfSignature;
     DAO public client; // address of DAO
     DAO public originalClient; // address of DAO who signed the contract
     bool public isContractValid;
 
-    modifier onlyClient {
-        if (msg.sender != address(client))
-            throw;
-        _
-    }
+    modifier onlyClient {if (msg.sender != address(client)) throw; _ }
+    
+    modifier onlyProjectMgr {if(msg.sender != projectMgr.addr) throw; _}
 
     // Prevents methods from perfoming any value transfer
     modifier noEther() {if (msg.value > 0) throw; _}
 
     function SampleOfferWithoutReward(
-        address _contractor,
         address _client,
-        bytes32 _IPFSHashOfTheProposalDocument,
         uint _totalCosts,
         uint _oneTimeCosts,
         uint _dailyWithdrawLimit
     ) {
-        contractor = _contractor;
+        projectMgr.addr = msg.sender;
         originalClient = DAO(_client);
         client = DAO(_client);
-        IPFSHashOfTheProposalDocument = _IPFSHashOfTheProposalDocument;
         totalCosts = _totalCosts;
         oneTimeCosts = _oneTimeCosts;
         dailyWithdrawLimit = _dailyWithdrawLimit;
+        
+        projectMgr.rate = 20;
+        designer.rate = 40;
+        developer.rate = 40;
     }
 
+    function changeRates(uint projectMgrRate, uint developerRate, uint designerRate) onlyProjectMgr noEther {
+            if(projectMgrRate + developerRate + designerRate != 100) throw;
+            
+            projectMgr.rate = projectMgrRate; 
+            developer.rate = developerRate;
+            designer.rate = designerRate;
+    }
+    
+    function setDeveloper(address dev) onlyProjectMgr {
+            developer.addr = dev;
+    }
+    
+    function setDesigner(address design) onlyProjectMgr {
+            designer.addr = design;
+    }
+   
+    function setProjectMgr(address mgr) onlyProjectMgr {
+            projectMgr.addr = mgr;
+    }
+    
     function sign() {
         if (msg.sender != address(originalClient) // no good samaritans give us money
             || msg.value != totalCosts    // no under/over payment
             || dateOfSignature != 0)      // don't sign twice
             throw;
-        if (!contractor.send(oneTimeCosts))
-            throw;
+            
         dateOfSignature = now;
         isContractValid = true;
     }
@@ -1210,14 +1234,24 @@ contract SampleOfferWithoutReward {
     }
 
     function getDailyPayment() {
-        if (msg.sender != contractor)
-            throw;
-        uint amount = (now - dateOfSignature + 1 days) / (1 days) * dailyWithdrawLimit - paidOut;
+            if(msg.sender == projectMgr.addr)
+                getDailyPaymentFor(projectMgr);
+            else if(msg.sender == developer.addr)
+                getDailyPaymentFor(developer);
+            else if (msg.sender == designer.addr)
+                getDailyPaymentFor(designer);
+            else
+                throw;
+            
+    }
+    
+    function getDailyPaymentFor(Actor actor) private {
+        uint amount = (now - dateOfSignature + 1 days) / (1 days) * (dailyWithdrawLimit * actor.rate / 100) - actor.paidOut;
         if (amount > this.balance) {
             amount = this.balance;
         }
-        if (contractor.send(amount))
-            paidOut += amount;
+        if (actor.addr.send(amount))
+            actor.paidOut += amount;
     }
 
     // Change the client DAO by giving the new DAO's address
@@ -1229,58 +1263,5 @@ contract SampleOfferWithoutReward {
 
     function () {
         throw; // this is a business contract, no donations
-    }
-}
-
-contract SampleOffer is SampleOfferWithoutReward {
-
-    uint public rewardDivisor;
-    uint public deploymentReward;
-
-        function SampleOffer(
-            address _contractor,
-            address _client,
-            bytes32 _IPFSHashOfTheProposalDocument,
-            uint _totalCosts,
-            uint _oneTimeCosts,
-            uint _dailyWithdrawLimit
-        ) SampleOfferWithoutReward(
-            _contractor,
-            _client,
-            _IPFSHashOfTheProposalDocument,
-            _totalCosts,
-            _oneTimeCosts,
-            _dailyWithdrawLimit) {
-        }
-    
-    // interface for Ethereum Computer
-    function payOneTimeReward() returns(bool) {
-        // client DAO should not be able to pay itself generating
-        // "free" reward tokens
-        if (msg.sender == address(client) || msg.sender == address(originalClient))
-            throw;
-
-        if (msg.value < deploymentReward)
-            throw;
-
-        if (originalClient.DAOrewardAccount().call.value(msg.value)()) {
-            return true;
-        } else {
-            throw;
-        }
-    }
-
-    // pay reward
-    function payReward() returns(bool) {
-        // client DAO should not be able to pay itself generating
-        // "free" reward tokens
-        if (msg.sender == address(client) || msg.sender == address(originalClient))
-            throw;
-
-        if (originalClient.DAOrewardAccount().call.value(msg.value)()) {
-            return true;
-        } else {
-            throw;
-        }
     }
 }

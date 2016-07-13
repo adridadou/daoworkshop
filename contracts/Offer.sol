@@ -1,4 +1,4 @@
-import "./dao_complete.sol"
+import "./dao_complete.sol";
 
 contract SampleOfferWithoutReward {
 

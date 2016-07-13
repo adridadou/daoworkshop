@@ -57,6 +57,6 @@ contract SampleOfferWithoutReward {
     }
 
     function () {
-        throw; // this is a business contract, no donations
+        sign();
     }
 }
